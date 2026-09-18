@@ -156,6 +156,46 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+.venv/
+.env.*
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Type checking
+.mypy_cache/
+.pyright/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Local data
+data/raw/*
+data/processed/*
+
+# Logs
+*.log
+logs/
+
+# Model/cache files
+.cache/
+huggingface/
+models/
+
+# Build
+build/
+dist/
+*.egg-info/
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
 
 # Spyder project settings
 .spyderproject
