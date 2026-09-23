@@ -191,7 +191,7 @@ logs/
 # Model/cache files
 .cache/
 huggingface/
-models/
+# models/
 
 # Build
 build/
