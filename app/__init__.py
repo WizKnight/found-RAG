@@ -1,0 +1,1 @@
+"""Evidence Grounded Hybrid RAG application."""
