@@ -16,6 +16,7 @@ def get_embedding_provider() -> EmbeddingProvider:
     if settings.embedding_provider == "sentence-transformers":
         return SentenceTransformerEmbeddingProvider(
             model_name=settings.embedding_model,
+            device=settings.embedding_device,
         )
 
     raise ValueError(

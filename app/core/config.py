@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     # Embeddings
     embedding_provider: str = "sentence-transformers"
     embedding_model: str = ""
+    embedding_device: str = "cuda"
 
     # Vector database
     qdrant_url: str = "http://localhost:6333"
