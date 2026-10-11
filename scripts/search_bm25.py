@@ -30,11 +30,11 @@ def main() -> None:
     )
 
     for result in results:
-        print(f"Rank: {result['rank']}")
-        print(f"Score: {result['score']:.4f}")
-        print(f"Chunk ID: {result['chunk_id']}")
+        print(f"Rank: {result.rank}")
+        print(f"Score: {result.score:.4f}")
+        print(f"Chunk ID: {result.chunk_id}")
         print()
-        print(result["text"])
+        print(result.text)
         print("=" * 80)
 
 
