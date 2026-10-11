@@ -19,4 +19,6 @@ def test_dense_retrieval():
     )
 
     assert results
-    assert results[0]["payload"]["text"]
+    assert results[0].text
+    assert results[0].retrieval_method == "dense"
+    assert results[0].rank == 1
