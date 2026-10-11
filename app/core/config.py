@@ -27,6 +27,14 @@ class Settings(BaseSettings):
     embedding_model: str = ""
     embedding_device: str = "cuda"
 
+    reranker_model: str = "BAAI/bge-reranker-base"
+    reranker_device: str = "cuda"
+
+    nli_model: str = "cross-encoder/nli-deberta-v3-base"
+    nli_device: str = "cuda"
+
+    verification_method: str = "nli"
+
     # Vector database
     qdrant_url: str = "http://localhost:6333"
     qdrant_api_key: SecretStr | None = None
