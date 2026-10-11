@@ -16,3 +16,4 @@ tiktoken
 sentence-transformers
 qdrant-client
 rank-bm25
+openai
