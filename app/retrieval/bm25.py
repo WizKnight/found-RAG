@@ -1,61 +1,56 @@
-from abc import ABC, abstractmethod
 import re
+from abc import ABC, abstractmethod
 
-# Abstraction Method
+from rank_bm25 import BM25Okapi
+
+from app.models.chunk import Chunk
+from app.models.retrieval import RetrievalResult
+
+
 class LexicalRetriever(ABC):
     @abstractmethod
     def index(
         self,
-        chunk_ids: list[str],
-        texts: list[str],
+        chunks: list[Chunk],
     ) -> None:
-        """Index document chunks."""
-        raise NotImplementedError
+        ...
 
     @abstractmethod
     def search(
         self,
         query: str,
         top_k: int,
-    ) -> list[dict]:
-        """Search for relevant document chunks based on a query."""
-        raise NotImplementedError
+    ) -> list[RetrievalResult]:
+        ...
 
 
 class BM25Retriever(LexicalRetriever):
     def __init__(self) -> None:
-        self._chunk_ids: list[str] = []
-        self._texts: list[str] = []
+        self._chunks: list[Chunk] = []
         self._tokenized_corpus: list[list[str]] = []
-        self.bm25 = None
+        self._bm25: BM25Okapi | None = None
 
     def index(
         self,
-        chunk_ids: list[str],
-        texts: list[str],
+        chunks: list[Chunk],
     ) -> None:
-        if len(chunk_ids) != len(texts):
-            raise ValueError(
-                "chunk_ids and texts must have the same length"
-            )
+        self._chunks = chunks
 
-        self._chunk_ids = chunk_ids
-        self._texts = texts
         self._tokenized_corpus = [
-            self._tokenize(text)
-            for text in texts
+            self._tokenize(chunk.text)
+            for chunk in chunks
         ]
 
-        from rank_bm25 import BM25Okapi
-
-        self.bm25 = BM25Okapi(self._tokenized_corpus)
+        self._bm25 = BM25Okapi(
+            self._tokenized_corpus
+        )
 
     def search(
         self,
         query: str,
         top_k: int,
-    ) -> list[dict]:
-        if self.bm25 is None:
+    ) -> list[RetrievalResult]:
+        if self._bm25 is None:
             raise RuntimeError(
                 "BM25 index has not been initialized"
             )
@@ -65,7 +60,9 @@ class BM25Retriever(LexicalRetriever):
 
         query_tokens = self._tokenize(query)
 
-        scores = self.bm25.get_scores(query_tokens)
+        scores = self._bm25.get_scores(
+            query_tokens
+        )
 
         ranked_indices = sorted(
             range(len(scores)),
@@ -73,22 +70,33 @@ class BM25Retriever(LexicalRetriever):
             reverse=True,
         )[:top_k]
 
-        return [
-            {
-                "chunk_id": self._chunk_ids[index],
-                "text": self._texts[index],
-                "score": float(scores[index]),
-                "rank": rank,
-                "retrieval_method": "bm25",
-            }
-            for rank, index in enumerate(ranked_indices, start=1)
-        ]
+        results: list[RetrievalResult] = []
 
+        for rank, index in enumerate(
+            ranked_indices,
+            start=1,
+        ):
+            chunk = self._chunks[index]
+
+            results.append(
+                RetrievalResult(
+                    chunk_id=chunk.id,
+                    text=chunk.text,
+                    score=float(scores[index]),
+                    rank=rank,
+                    retrieval_method="bm25",
+                    document_id=chunk.document_id,
+                    page_number=chunk.page_number,
+                    section=chunk.section,
+                    metadata=chunk.metadata,
+                )
+            )
+
+        return results
 
     @staticmethod
-
     def _tokenize(text: str) -> list[str]:
         return re.findall(
             r"\b[\w-]+\b",
             text.lower(),
-        )   
+        )
