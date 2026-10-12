@@ -50,6 +50,8 @@ class Settings(BaseSettings):
     chunk_size: int = 600
     chunk_overlap: int = 100
 
+    bm25_index_path: str = "data/processed/bm25_chunks.json"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
