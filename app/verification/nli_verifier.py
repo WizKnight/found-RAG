@@ -1,3 +1,4 @@
+
 import numpy as np
 from sentence_transformers import CrossEncoder
 
@@ -5,6 +6,7 @@ from app.models.generation import Citation
 from app.models.verification import (
     Claim,
     ClaimVerification,
+    EvidenceVerification,
     VerificationStatus,
 )
 from app.verification.probabilities import softmax
@@ -15,16 +17,14 @@ class NLIClaimVerifier(ClaimVerifier):
     ENTAILMENT = 1
     CONTRADICTION = 0
     NEUTRAL = 2
+    NUM_LABELS = 3
 
     def __init__(
         self,
         model_name: str,
         device: str | None = None,
     ) -> None:
-        self.model = CrossEncoder(
-            model_name,
-            device=device,
-        )
+        self.model = CrossEncoder(model_name, device=device)
 
     def verify(
         self,
@@ -42,6 +42,7 @@ class NLIClaimVerifier(ClaimVerifier):
                 contradiction_probability=0.0,
                 neutral_probability=1.0,
                 evidence=[],
+                evidence_verifications=[],
                 explanation="No cited evidence was found.",
             )
 
@@ -50,49 +51,79 @@ class NLIClaimVerifier(ClaimVerifier):
             for citation in evidence
         ]
 
-        predictions = self.model.predict(
-            pairs,
-            show_progress_bar=False,
+        predictions = np.asarray(
+            self.model.predict(
+                pairs,
+                show_progress_bar=False,
+            )
         )
 
-        predictions = np.asarray(predictions)
-
-        if predictions.ndim != 2:
+        expected_shape = (len(evidence), self.NUM_LABELS)
+        if predictions.shape != expected_shape:
             raise ValueError(
                 "Expected NLI model output with shape "
-                "(num_pairs, num_labels)."
+                f"{expected_shape}, got {predictions.shape}."
             )
 
-        best_result: tuple[
-            VerificationStatus,
-            float,
-            np.ndarray,
-        ] | None = None
+        evidence_verifications: list[EvidenceVerification] = []
 
-        for prediction in predictions:
+        for citation, prediction in zip(
+            evidence,
+            predictions,
+            strict=True,
+        ):
             probabilities = softmax(prediction)
 
-            label_index = int(
-                np.argmax(probabilities)
+            label_index = int(np.argmax(probabilities))
+            confidence = float(probabilities[label_index])
+            status = self._label_to_status(label_index)
+
+            evidence_verifications.append(
+                EvidenceVerification(
+                    citation_id=citation.citation_id,
+                    status=status,
+                    confidence=confidence,
+                    entailment_probability=float(
+                        probabilities[self.ENTAILMENT]
+                    ),
+                    contradiction_probability=float(
+                        probabilities[self.CONTRADICTION]
+                    ),
+                    neutral_probability=float(
+                        probabilities[self.NEUTRAL]
+                    ),
+                    evidence=citation.text,
+                )
             )
 
-            confidence = float(
-                probabilities[label_index]
+        status = self._aggregate_status(evidence_verifications)
+
+        entailment_probability = max(
+            result.entailment_probability
+            for result in evidence_verifications
+            if result.entailment_probability is not None
+        )
+        contradiction_probability = max(
+            result.contradiction_probability
+            for result in evidence_verifications
+            if result.contradiction_probability is not None
+        )
+        neutral_probability = max(
+            result.neutral_probability
+            for result in evidence_verifications
+            if result.neutral_probability is not None
+        )
+
+        # Conflicting evidence has no single, representative confidence.
+        confidence = (
+            None
+            if status == VerificationStatus.CONFLICTING
+            else max(
+                result.confidence
+                for result in evidence_verifications
+                if result.confidence is not None
             )
-
-            status = self._label_to_status(
-                label_index
-            )
-
-            if (
-                best_result is None
-                or confidence > best_result[1]
-            ):
-                best_result = (status, confidence, probabilities)
-
-        assert best_result is not None
-
-        status, confidence, probabilities = best_result
+        )
 
         return ClaimVerification(
             claim_id=claim.claim_id,
@@ -100,24 +131,57 @@ class NLIClaimVerifier(ClaimVerifier):
             citation_ids=claim.citation_ids,
             status=status,
             confidence=confidence,
-            entailment_probability=float(
-                probabilities[self.ENTAILMENT]
-            ),
-            contradiction_probability=float(
-                probabilities[self.CONTRADICTION]
-            ),
-            neutral_probability=float(
-                probabilities[self.NEUTRAL]
-            ),
+            entailment_probability=entailment_probability,
+            contradiction_probability=contradiction_probability,
+            neutral_probability=neutral_probability,
             evidence=[
-                citation.text
-                for citation in evidence
+                result.evidence
+                for result in evidence_verifications
             ],
-            explanation=(
-                "NLI verification using "
-                "cross-encoder/nli-deberta-v3-base."
-            ),
+            evidence_verifications=evidence_verifications,
+            explanation=self._build_explanation(status),
         )
+
+    @staticmethod
+    def _aggregate_status(
+        results: list[EvidenceVerification],
+    ) -> VerificationStatus:
+        statuses = {result.status for result in results}
+
+        has_support = VerificationStatus.SUPPORTED in statuses
+        has_contradiction = VerificationStatus.CONTRADICTED in statuses
+
+        if has_support and has_contradiction:
+            return VerificationStatus.CONFLICTING
+
+        if has_contradiction:
+            return VerificationStatus.CONTRADICTED
+
+        if has_support:
+            return VerificationStatus.SUPPORTED
+
+        return VerificationStatus.NOT_SUPPORTED
+
+    @staticmethod
+    def _build_explanation(
+        status: VerificationStatus,
+    ) -> str:
+        explanations = {
+            VerificationStatus.SUPPORTED: (
+                "At least one cited source supports the claim."
+            ),
+            VerificationStatus.CONTRADICTED: (
+                "The cited evidence contradicts the claim."
+            ),
+            VerificationStatus.NOT_SUPPORTED: (
+                "The cited evidence does not support the claim."
+            ),
+            VerificationStatus.CONFLICTING: (
+                "The cited evidence contains both supporting "
+                "and contradicting statements."
+            ),
+        }
+        return explanations[status]
 
     @classmethod
     def _label_to_status(

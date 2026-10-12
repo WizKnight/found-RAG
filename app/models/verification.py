@@ -7,12 +7,23 @@ class VerificationStatus(StrEnum):
     SUPPORTED = "supported"
     CONTRADICTED = "contradicted"
     NOT_SUPPORTED = "not_supported"
+    CONFLICTING = "conflicting"
 
 
 class Claim(BaseModel):
     claim_id: str
     text: str
     citation_ids: list[str] = Field(default_factory=list)
+
+
+class EvidenceVerification(BaseModel):
+    citation_id: str
+    status: VerificationStatus
+    confidence: float | None = None
+    entailment_probability: float | None = None
+    contradiction_probability: float | None = None
+    neutral_probability: float | None = None
+    evidence: str
 
 
 class ClaimVerification(BaseModel):
@@ -29,6 +40,11 @@ class ClaimVerification(BaseModel):
     neutral_probability: float | None = None
 
     evidence: list[str] = Field(default_factory=list)
+
+    evidence_verifications: list[EvidenceVerification] = Field(
+        default_factory=list
+    )
+
     explanation: str | None = None
 
 
