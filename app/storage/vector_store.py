@@ -1,3 +1,4 @@
+
 from abc import ABC, abstractmethod
 from uuid import UUID
 
@@ -18,6 +19,16 @@ class VectorStore(ABC):
         payloads: list[dict],
     ) -> None:
         """Insert or update vectors."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def delete_points(self, ids: list[UUID]) -> None:
+        """Delete specific vector points by ID."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def delete_document(self, document_id: UUID) -> None:
+        """Delete all vector points belonging to a document."""
         raise NotImplementedError
 
     @abstractmethod

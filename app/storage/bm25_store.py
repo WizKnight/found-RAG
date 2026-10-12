@@ -90,3 +90,29 @@ class BM25IndexStore:
 
         self.save_chunks(remaining)
         return remaining
+
+    
+    def replace_document(
+        self,
+        document_id: UUID,
+        chunks: list[Chunk],
+    ) -> list[Chunk]:
+        """Atomically replace the persisted chunks for one document."""
+        if any(chunk.document_id != document_id for chunk in chunks):
+            raise ValueError(
+                "All replacement chunks must belong to the target document."
+            )
+
+        existing = {
+            chunk.id: chunk
+            for chunk in self.load_chunks()
+            if chunk.document_id != document_id
+        }
+
+        for chunk in chunks:
+            existing[chunk.id] = chunk
+
+        merged = list(existing.values())
+        self.save_chunks(merged)
+        return merged
+

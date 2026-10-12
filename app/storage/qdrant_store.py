@@ -10,6 +10,18 @@ from qdrant_client.models import (
 from app.storage.vector_store import VectorStore
 
 
+from qdrant_client.models import (
+    Distance,
+    FieldCondition,
+    Filter,
+    FilterSelector,
+    MatchValue,
+    PointIdsList,
+    PointStruct,
+    VectorParams,
+)
+
+
 class QdrantVectorStore(VectorStore):
     """Qdrant-backed vector store."""
 
@@ -87,3 +99,34 @@ class QdrantVectorStore(VectorStore):
             }
             for result in results
         ]
+
+    
+    def delete_points(self, ids: list[UUID]) -> None:
+        """Delete specific points without affecting other chunks."""
+        if not ids:
+            return
+
+        self.client.delete(
+            collection_name=self.collection_name,
+            points_selector=PointIdsList(
+                points=[str(point_id) for point_id in ids],
+            ),
+            wait=True,
+        )
+
+    def delete_document(self, document_id: UUID) -> None:
+        """Delete all points whose payload belongs to a document."""
+        self.client.delete(
+            collection_name=self.collection_name,
+            points_selector=FilterSelector(
+                filter=Filter(
+                    must=[
+                        FieldCondition(
+                            key="document_id",
+                            match=MatchValue(value=str(document_id)),
+                        )
+                    ]
+                )
+            ),
+            wait=True,
+        )

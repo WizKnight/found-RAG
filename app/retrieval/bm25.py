@@ -124,6 +124,24 @@ class BM25Retriever(LexicalRetriever):
 
         self._bm25 = BM25Okapi(self._tokenized_corpus)
 
+    
+    def replace_document(
+        self,
+        document_id: UUID,
+        chunks: list[Chunk],
+    ) -> None:
+        if self._index_store is None:
+            raise RuntimeError(
+                "Document replacement requires a persistent BM25 index store."
+            )
+
+        all_chunks = self._index_store.replace_document(
+            document_id=document_id,
+            chunks=chunks,
+        )
+        self._rebuild_index(all_chunks)
+
+
     @staticmethod
     def _tokenize(text: str) -> list[str]:
         return re.findall(r"\b[\w-]+\b", text.lower())
