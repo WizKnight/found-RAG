@@ -24,6 +24,7 @@ class GenerationPipeline:
     def answer(
         self,
         query: str,
+        verification_feedback: str | None = None,
     ) -> GeneratedAnswer:
         results = self.retrieval_pipeline.search(query)
 
@@ -34,6 +35,7 @@ class GenerationPipeline:
         user_prompt = build_user_prompt(
             query=query,
             context=context,
+            verification_feedback=verification_feedback,
         )
 
         answer = self.llm.generate(
@@ -45,3 +47,6 @@ class GenerationPipeline:
             answer=answer,
             citations=citations,
         )
+
+    def generate(self, query, verification_feedback):
+        ...

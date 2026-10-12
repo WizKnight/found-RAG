@@ -14,11 +14,13 @@ Rules:
 """.strip()
 
 
+
 def build_user_prompt(
     query: str,
     context: str,
+    verification_feedback: str | None = None,
 ) -> str:
-    return f"""
+    prompt = f"""
 Evidence:
 
 {context}
@@ -30,3 +32,18 @@ Question:
 Answer the question using only the evidence above.
 Include citation IDs such as [CIT-1] after factual claims.
 """.strip()
+
+    if verification_feedback:
+        prompt += f"""
+
+Verification feedback from the previous attempt:
+
+{verification_feedback}
+
+Regenerate the answer from the provided evidence. Correct the
+identified issues. Do not invent facts or citation IDs. If the
+evidence cannot support a reliable answer, state that it is
+insufficient.
+""".rstrip()
+
+    return prompt
