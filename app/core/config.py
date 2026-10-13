@@ -51,6 +51,7 @@ class Settings(BaseSettings):
     chunk_overlap: int = 100
 
     bm25_index_path: str = "data/processed/bm25_chunks.json"
+    indexing_journal_path: str = "data/processed/indexing_journal.json"
 
     model_config = SettingsConfigDict(
         env_file=".env",
