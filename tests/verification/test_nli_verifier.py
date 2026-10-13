@@ -56,7 +56,7 @@ def make_verifier(
     predictions: list[list[float]],
 ) -> NLIClaimVerifier:
     verifier = NLIClaimVerifier.__new__(NLIClaimVerifier)
-    setattr(verifier, "model", FakeNLIModel(predictions))
+    verifier.model = FakeNLIModel(predictions)
     return verifier
 
 

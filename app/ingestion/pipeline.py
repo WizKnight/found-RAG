@@ -1,8 +1,8 @@
 from pathlib import Path
 
 from app.core.config import get_settings
-from app.ingestion.cleaner import normalize_text
 from app.ingestion.chunker import TextChunker
+from app.ingestion.cleaner import normalize_text
 from app.ingestion.hash import calculate_file_hash
 from app.ingestion.loader_factory import get_loader
 from app.models.document import Document, DocumentType

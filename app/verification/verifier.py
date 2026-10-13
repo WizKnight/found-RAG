@@ -1,10 +1,10 @@
 from abc import ABC, abstractmethod
 
+from app.models.generation import Citation
 from app.models.verification import (
     Claim,
     ClaimVerification,
 )
-from app.models.generation import Citation
 
 
 class ClaimVerifier(ABC):

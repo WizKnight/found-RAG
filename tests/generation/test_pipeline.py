@@ -1,8 +1,8 @@
-from uuid import uuid4
 from typing import cast
+from uuid import uuid4
 
-from app.generation.pipeline import GenerationPipeline
 from app.generation.llm import LLM
+from app.generation.pipeline import GenerationPipeline
 from app.models.retrieval import RetrievalResult
 from app.retrieval.pipeline import RetrievalPipeline
 

@@ -3,7 +3,6 @@ from pathlib import Path
 from app.ingestion.pipeline import ingest_document
 from app.models.document import DocumentType
 
-
 SAMPLE_DOCUMENT = Path("data/raw/sample.txt")
 
 

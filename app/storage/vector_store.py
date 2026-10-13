@@ -39,3 +39,7 @@ class VectorStore(ABC):
     ) -> list[dict]:
         """Search for similar vectors."""
         raise NotImplementedError
+
+    def get_document_chunk_ids(self, document_id: UUID) -> set[UUID]:
+        """Return all chunk IDs stored for a document."""
+        raise NotImplementedError

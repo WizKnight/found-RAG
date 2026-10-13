@@ -131,8 +131,10 @@ class RAGOrchestrator:
             )
 
         lines = [
+            (
             "The following claims failed verification. "
             "Correct or remove them using only the supplied evidence:"
+            )
         ]
 
         for item in failed_claims:

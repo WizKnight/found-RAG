@@ -1,9 +1,9 @@
 from app.generation.context_builder import ContextBuilder
+from app.generation.llm import LLM
 from app.generation.prompts import (
     SYSTEM_PROMPT,
     build_user_prompt,
 )
-from app.generation.llm import LLM
 from app.models.generation import GeneratedAnswer
 from app.retrieval.pipeline import RetrievalPipeline
 

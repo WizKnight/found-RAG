@@ -3,7 +3,6 @@ import re
 from app.models.verification import Claim
 from app.verification.citation_parser import extract_citation_ids
 
-
 CLAIM_PATTERN = re.compile(
     r"""
     .*?

@@ -1,7 +1,7 @@
 from app.models.retrieval import RetrievalResult
+from app.retrieval.dense import dense_search
 from app.retrieval.rrf import ReciprocalRankFusion
 from app.services.bm25_service import bm25_search
-from app.retrieval.dense import dense_search
 
 
 class HybridRetriever:

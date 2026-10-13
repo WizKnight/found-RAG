@@ -4,7 +4,6 @@ from app.ingestion.pipeline import ingest_document
 from app.retrieval.dense import dense_search
 from app.services.indexing_service import index_chunks
 
-
 SAMPLE_DOCUMENT = Path("data/raw/sample.txt")
 
 

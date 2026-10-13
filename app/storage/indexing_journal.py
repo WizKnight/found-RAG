@@ -25,7 +25,7 @@ class IndexingJournal:
         try:
             data = json.loads(self.path.read_text(encoding="utf-8"))
             if not isinstance(data, dict):
-                raise ValueError("Journal root must be a JSON object.")
+                raise TypeError("Journal root must be a JSON object.")
 
             operations = {
                 key: IndexingOperation.model_validate(value)

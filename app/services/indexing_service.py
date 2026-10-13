@@ -1,6 +1,9 @@
+import logging
 from uuid import UUID
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 from app.models.chunk import Chunk
 from app.models.indexing_operation import (
@@ -8,7 +11,11 @@ from app.models.indexing_operation import (
     IndexingOperationStatus,
 )
 from app.services.bm25_service import get_bm25_index_store, get_bm25_retriever
+from app.services.canonical_chunk_service import get_canonical_chunk_store
 from app.services.embedding_service import get_embedding_provider
+from app.services.index_consistency_service import (
+    inspect_document_indexes,
+)
 from app.services.indexing_journal_service import get_indexing_journal
 from app.services.vector_store_service import get_vector_store
 
@@ -144,6 +151,12 @@ def _execute_indexing_operation(
             for chunk in chunks
         ]
 
+        canonical_store = get_canonical_chunk_store()
+        canonical_store.replace_document(
+            document_id=operation.document_id,
+            chunks=chunks,
+        )
+
         # Upsert first so existing vectors remain available if this fails.
         vector_store.upsert(
             ids=[chunk.id for chunk in chunks],
@@ -169,14 +182,27 @@ def _execute_indexing_operation(
             operation.operation_id,
             status=IndexingOperationStatus.BM25_UPDATED,
             error=None,
+        ) # Both index writes have returned successfully.
+        report = inspect_document_indexes(
+            document_id=operation.document_id,
+            expected_chunk_ids=set(operation.chunk_ids),
         )
 
-        # Both index writes have returned successfully.
+        if not report.is_consistent:
+            raise RuntimeError(
+                "Index consistency check failed: "
+                f"BM25 missing={len(report.bm25_missing_ids)}, "
+                f"BM25 extra={len(report.bm25_extra_ids)}, "
+                f"Qdrant missing={len(report.qdrant_missing_ids)}, "
+                f"Qdrant extra={len(report.qdrant_extra_ids)}."
+            )
+
         journal.update(
             operation.operation_id,
             status=IndexingOperationStatus.COMPLETED,
             error=None,
         )
+
 
     except Exception as exc:
         try:
@@ -185,9 +211,12 @@ def _execute_indexing_operation(
                 status=IndexingOperationStatus.NEEDS_RECONCILIATION,
                 error=f"{type(exc).__name__}: {exc}"[:2000],
             )
-        except Exception:
+        except Exception as exc:
+            logger.exception(
+                "Failed to reconcile indexing operation %s",
+                operation.operation_id,
+            )
             # Preserve the original indexing exception. A journal write
             # failure should be surfaced by monitoring and process logs.
-            pass
 
         raise

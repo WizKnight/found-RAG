@@ -52,6 +52,7 @@ class Settings(BaseSettings):
 
     bm25_index_path: str = "data/processed/bm25_chunks.json"
     indexing_journal_path: str = "data/processed/indexing_journal.json"
+    canonical_chunks_path: str = "data/processed/canonical_chunks.json"
 
     model_config = SettingsConfigDict(
         env_file=".env",

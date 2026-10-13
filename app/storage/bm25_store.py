@@ -19,7 +19,7 @@ class BM25IndexStore:
         try:
             data = json.loads(self.path.read_text(encoding="utf-8"))
             if not isinstance(data, list):
-                raise ValueError("The BM25 corpus must be a JSON list.")
+                raise TypeError("The BM25 corpus must be a JSON list.")
 
             return [Chunk.model_validate(item) for item in data]
         except (json.JSONDecodeError, ValueError, TypeError) as exc:

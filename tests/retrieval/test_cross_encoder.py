@@ -1,5 +1,5 @@
-from uuid import uuid4
 from typing import Any, cast
+from uuid import uuid4
 
 from app.models.retrieval import RetrievalResult
 from app.retrieval.cross_encoder import CrossEncoderReranker
