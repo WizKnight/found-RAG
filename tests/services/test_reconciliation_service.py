@@ -72,7 +72,7 @@ def consistent_report(document_id, chunk_ids):
     )
 
 
-def configure_reconciliation(monkeypatch, operation):
+def configure_reconciliation(monkeypatch, operation, canonical_chunks):
     journal = FakeJournal([operation])
     calls = []
 
@@ -80,6 +80,11 @@ def configure_reconciliation(monkeypatch, operation):
         reconciliation_service,
         "get_indexing_journal",
         lambda: journal,
+    )
+    monkeypatch.setattr(
+        reconciliation_service,
+        "get_canonical_chunk_store",
+        lambda: FakeCanonicalStore(canonical_chunks),
     )
 
     def inspect_indexes(document_id, expected_chunk_ids):
@@ -104,7 +109,7 @@ def test_successful_reconciliation_marks_operation_completed(
         make_chunk(document_id, "Second", 1),
     ]
     operation = make_operation(document_id, chunks)
-    journal, calls = configure_reconciliation(monkeypatch, operation)
+    journal, calls = configure_reconciliation(monkeypatch, operation, chunks)
 
     def load_chunks(requested_document_id, expected_ids):
         calls.append("load_canonical")
@@ -151,7 +156,7 @@ def test_missing_canonical_chunk_prevents_reconciliation(
     document_id = uuid4()
     chunks = [make_chunk(document_id)]
     operation = make_operation(document_id, chunks)
-    journal, calls = configure_reconciliation(monkeypatch, operation)
+    journal, calls = configure_reconciliation(monkeypatch, operation, chunks)
 
     def load_incomplete_chunks(requested_document_id, expected_ids):
         return []
@@ -183,7 +188,7 @@ def test_reconciliation_rejects_chunks_from_another_document(
     document_id = uuid4()
     chunks = [make_chunk(document_id)]
     operation = make_operation(document_id, chunks)
-    journal, _ = configure_reconciliation(monkeypatch, operation)
+    journal, _ = configure_reconciliation(monkeypatch, operation, chunks)
 
     wrong_document_chunks = [
         make_chunk(uuid4(), "Wrong document")
@@ -209,7 +214,7 @@ def test_failed_reconciliation_returns_failure_outcome(
     document_id = uuid4()
     chunks = [make_chunk(document_id)]
     operation = make_operation(document_id, chunks)
-    journal, _ = configure_reconciliation(monkeypatch, operation)
+    journal, _ = configure_reconciliation(monkeypatch, operation, chunks)
 
     def load_chunks(requested_document_id, expected_ids):
         return chunks
@@ -244,7 +249,7 @@ def test_completed_operations_are_not_replayed(monkeypatch):
         chunk_ids=[chunk.id for chunk in chunks],
         status=IndexingOperationStatus.COMPLETED,
     )
-    journal, _ = configure_reconciliation(monkeypatch, operation)
+    journal, _ = configure_reconciliation(monkeypatch, operation, chunks)
 
     def should_not_load(requested_document_id, expected_ids):
         raise AssertionError("Completed operation must not be replayed.")
@@ -257,3 +262,42 @@ def test_completed_operations_are_not_replayed(monkeypatch):
     assert journal.get(operation.operation_id).status == (
         IndexingOperationStatus.COMPLETED
     )
+
+def test_superseded_operation_is_not_replayed(monkeypatch):
+    document_id = uuid4()
+    old_chunks = [make_chunk(document_id, "Old version")]
+    new_chunks = [make_chunk(document_id, "New version")]
+
+    operation = make_operation(document_id, old_chunks)
+    journal, calls = configure_reconciliation(
+        monkeypatch,
+        operation,
+        canonical_chunks=new_chunks,
+    )
+
+    def should_not_load_old_chunks(requested_document_id, expected_ids):
+        raise AssertionError("Superseded chunks must not be loaded.")
+
+    outcomes = reconciliation_service.reconcile_incomplete_operations(
+        should_not_load_old_chunks
+    )
+
+    assert len(outcomes) == 1
+    assert outcomes[0].recovered is False
+    assert outcomes[0].superseded is True
+    assert journal.get(operation.operation_id).status == (
+        IndexingOperationStatus.SUPERSEDED
+    )
+    assert "inspect" not in calls
+
+
+class FakeCanonicalStore:
+    def __init__(self, chunks):
+        self.chunks = list(chunks)
+
+    def get_document_chunks(self, document_id):
+        return [
+            chunk
+            for chunk in self.chunks
+            if chunk.document_id == document_id
+        ]

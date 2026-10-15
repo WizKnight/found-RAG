@@ -115,3 +115,22 @@ def test_missing_operation_raises_key_error(tmp_path) -> None:
         pass
     else:
         raise AssertionError("Expected KeyError for missing operation")
+
+
+def test_superseded_operations_are_not_in_incomplete_list(
+    tmp_path,
+) -> None:
+    journal = IndexingJournal(tmp_path / "indexing_journal.json")
+    operation = IndexingOperation(
+        document_id=uuid4(),
+        chunk_ids=[uuid4()],
+    )
+    journal.create(operation)
+
+    journal.update(
+        operation.operation_id,
+        status=IndexingOperationStatus.SUPERSEDED,
+        error="Replaced by a newer canonical document version.",
+    )
+
+    assert journal.list_incomplete() == []

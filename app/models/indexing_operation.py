@@ -16,6 +16,7 @@ class IndexingOperationStatus(StrEnum):
     BM25_UPDATED = "bm25_updated"
     COMPLETED = "completed"
     NEEDS_RECONCILIATION = "needs_reconciliation"
+    SUPERSEDED = "superseded"
 
 
 class IndexingOperation(BaseModel):

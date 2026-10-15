@@ -1,4 +1,4 @@
-
+import logging
 from collections.abc import Callable
 from uuid import UUID
 
@@ -11,20 +11,24 @@ from app.services.index_consistency_service import inspect_document_indexes
 from app.services.indexing_journal_service import get_indexing_journal
 from app.services.indexing_service import reconcile_indexing_operation
 
+logger = logging.getLogger(__name__)
+
+CanonicalChunkLoader = Callable[[UUID, set[UUID]], list[Chunk]]
+
 
 class ReconciliationOutcome(BaseModel):
     operation_id: UUID
     document_id: UUID
     recovered: bool
     message: str
+    superseded: bool = False
 
-
-CanonicalChunkLoader = Callable[[UUID, set[UUID]], list[Chunk]]
 
 def load_canonical_chunks(
     document_id: UUID,
     expected_chunk_ids: set[UUID],
 ) -> list[Chunk]:
+    """Load the exact authoritative chunks required by an operation."""
     return get_canonical_chunk_store().get_chunks_by_ids(
         document_id=document_id,
         chunk_ids=expected_chunk_ids,
@@ -34,41 +38,48 @@ def load_canonical_chunks(
 def reconcile_incomplete_operations(
     load_canonical_chunks: CanonicalChunkLoader,
 ) -> list[ReconciliationOutcome]:
-    """Retry incomplete operations using authoritative chunk records."""
+    """Recover incomplete operations using canonical document chunks."""
     journal = get_indexing_journal()
+    canonical_store = get_canonical_chunk_store()
     outcomes: list[ReconciliationOutcome] = []
 
     for operation in journal.list_incomplete():
         try:
             expected_ids = set(operation.chunk_ids)
-            chunks = load_canonical_chunks(
-                operation.document_id,
-                expected_ids,
-            )
 
-            if {chunk.id for chunk in chunks} != expected_ids:
-                raise ValueError(
-                    "Canonical chunk loader returned IDs that do not "
-                    "match the journal operation."
+            if _is_superseded(
+                document_id=operation.document_id,
+                expected_chunk_ids=expected_ids,
+                canonical_store=canonical_store,
+            ):
+                outcomes.append(
+                    _mark_superseded(
+                        operation_id=operation.operation_id,
+                        document_id=operation.document_id,
+                        journal=journal,
+                    )
                 )
+                continue
+
+            chunks = _load_and_validate_chunks(
+                loader=load_canonical_chunks,
+                document_id=operation.document_id,
+                expected_chunk_ids=expected_ids,
+            )
 
             reconcile_indexing_operation(
                 operation_id=operation.operation_id,
                 canonical_chunks=chunks,
             )
 
-            report = inspect_document_indexes(
+            _verify_reconciled_operation(
+                operation_id=operation.operation_id,
                 document_id=operation.document_id,
                 expected_chunk_ids=expected_ids,
             )
 
-            if not report.is_consistent:
-                raise RuntimeError(
-                    "Reconciliation finished but index consistency "
-                    "verification failed."
-                )
-
             current = journal.get(operation.operation_id)
+
             if current.status != IndexingOperationStatus.COMPLETED:
                 raise RuntimeError(
                     "Indexes match, but the journal operation is not "
@@ -84,10 +95,13 @@ def reconcile_incomplete_operations(
                 )
             )
 
-        except Exception as exc: # noqa: BLE001
-            # Continue processing other operations. The indexing service
-            # normally records failures; loader and consistency failures
-            # are also returned here for observability.
+        except Exception as exc:
+            logger.exception(
+                "Failed to reconcile operation %s for document %s",
+                operation.operation_id,
+                operation.document_id,
+            )
+
             outcomes.append(
                 ReconciliationOutcome(
                     operation_id=operation.operation_id,
@@ -98,3 +112,90 @@ def reconcile_incomplete_operations(
             )
 
     return outcomes
+
+
+def _is_superseded(
+    document_id: UUID,
+    expected_chunk_ids: set[UUID],
+    canonical_store,
+) -> bool:
+    """Return whether an operation targets an obsolete chunk set."""
+    current_chunks = canonical_store.get_document_chunks(document_id)
+    current_chunk_ids = {chunk.id for chunk in current_chunks}
+
+    return current_chunk_ids != expected_chunk_ids
+
+
+def _mark_superseded(
+    operation_id: UUID,
+    document_id: UUID,
+    journal,
+) -> ReconciliationOutcome:
+    """Mark an obsolete operation terminal without replaying it."""
+    message = (
+        "Operation superseded: its chunk IDs do not match "
+        "the current canonical document version."
+    )
+
+    journal.update(
+        operation_id,
+        status=IndexingOperationStatus.SUPERSEDED,
+        error=message,
+    )
+
+    logger.info(
+        "Marked operation %s for document %s as superseded",
+        operation_id,
+        document_id,
+    )
+
+    return ReconciliationOutcome(
+        operation_id=operation_id,
+        document_id=document_id,
+        recovered=False,
+        superseded=True,
+        message=message,
+    )
+
+
+def _load_and_validate_chunks(
+    loader: CanonicalChunkLoader,
+    document_id: UUID,
+    expected_chunk_ids: set[UUID],
+) -> list[Chunk]:
+    """Load canonical chunks and reject incomplete or unexpected results."""
+    chunks = loader(document_id, expected_chunk_ids)
+
+    if any(chunk.document_id != document_id for chunk in chunks):
+        raise ValueError(
+            "Canonical chunk loader returned chunks belonging "
+            "to another document."
+        )
+
+    actual_ids = {chunk.id for chunk in chunks}
+
+    if len(chunks) != len(expected_chunk_ids) or actual_ids != expected_chunk_ids:
+        raise ValueError(
+            "Canonical chunk loader returned IDs that do not "
+            "match the journal operation."
+        )
+
+    return chunks
+
+
+def _verify_reconciled_operation(
+    operation_id: UUID,
+    document_id: UUID,
+    expected_chunk_ids: set[UUID],
+) -> None:
+    """Require consistent indexes before accepting recovery."""
+    report = inspect_document_indexes(
+        document_id=document_id,
+        expected_chunk_ids=expected_chunk_ids,
+    )
+
+    if not report.is_consistent:
+        raise RuntimeError(
+            "Reconciliation finished but index consistency "
+            "verification failed."
+        )

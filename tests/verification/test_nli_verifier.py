@@ -4,6 +4,7 @@ from uuid import uuid4
 
 import numpy as np
 import pytest
+from sentence_transformers import CrossEncoder
 
 from app.models.generation import Citation
 from app.models.verification import (
@@ -56,7 +57,7 @@ def make_verifier(
     predictions: list[list[float]],
 ) -> NLIClaimVerifier:
     verifier = NLIClaimVerifier.__new__(NLIClaimVerifier)
-    setattr(verifier, "model", FakeNLIModel(predictions))
+    verifier.model = cast(CrossEncoder, FakeNLIModel(predictions))
     return verifier
 
 

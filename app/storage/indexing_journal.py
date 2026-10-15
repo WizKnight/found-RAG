@@ -134,6 +134,7 @@ class IndexingJournal:
     def list_incomplete(self) -> list[IndexingOperation]:
         terminal_statuses = {
             IndexingOperationStatus.COMPLETED,
+            IndexingOperationStatus.SUPERSEDED,
         }
 
         with self._lock:
